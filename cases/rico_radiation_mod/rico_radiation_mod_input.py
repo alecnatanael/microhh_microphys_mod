@@ -15,7 +15,7 @@ use_rt = False
 diurnal_cycle = False
 
 # Read ini file
-ini = mht.Read_namelist('rico_radiation.ini')
+ini = mht.Read_namelist('rico_radiation_mod.ini')
 
 # Get number of vertical levels and size
 kmax  = ini['grid']['ktot']
@@ -51,7 +51,7 @@ def calc_o3(z,p):
     return o3
 
 # Create input file
-nc_file = nc.Dataset("rico_radiation_input.nc", mode="w", datamodel="NETCDF4", clobber=True)
+nc_file = nc.Dataset("rico_radiation_mod_input.nc", mode="w", datamodel="NETCDF4", clobber=True)
 
 nc_file.createDimension("z", kmax)
 nc_z = nc_file.createVariable("z", float_type, ("z"))
@@ -264,7 +264,7 @@ else:
     ini['radiation']['tsi_scaling'] = 0.29081
     ini['radiation']['sza'] = np.deg2rad(42.05)
 
-ini.save("rico_radiation.ini", allow_overwrite=True)
+ini.save("rico_radiation_mod.ini", allow_overwrite=True)
 
 nc_file.close()
 
