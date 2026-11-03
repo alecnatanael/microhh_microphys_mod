@@ -44,6 +44,10 @@ namespace Constants
     template<typename TF> constexpr TF xmair = 28.9647;       // Molar mass of dry air [kg kmol-1]
     template<typename TF> constexpr TF xmh2o = 18.01528;      // Molar mass of h2o [kg kmol-1]
 
+    // Outras massas molares em kg mol-1 para uso em microfísica e termodinâmica
+    template<typename TF> constexpr TF Mw = 0.01801528; // Molar mass of water vapor [kg mol-1]
+    template<typename TF> constexpr TF Md = 0.0289647;    // Molar mass of dry air [kg mol-1]
+
     // Soil / land-surface specific constants
     template<typename TF> constexpr TF rho_C_matrix   = 1.6e6;   // Volumetric soil heat capacity [J m-3 K-1]
     template<typename TF> constexpr TF rho_C_water    = 4.18e6;  // Volumetric water heat capacity [J m-3 K-1]
