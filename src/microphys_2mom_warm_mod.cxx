@@ -706,7 +706,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     std::vector<TF> exner = thermo.get_basestate_vector("exner");
 
     // Obter velocidade vertical (w) e campos para velocidade efetiva wef
-    const TF* const restrict w = fields.sp.at("w")->fld.data();
+    const TF* const restrict w = fields.mp.at("w")->fld.data();
     const TF* const restrict thl = fields.sp.at("thl")->fld.data();
 
     TF* const restrict nat = fields.st.at("na")->fld.data();
