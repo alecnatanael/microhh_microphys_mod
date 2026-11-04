@@ -64,6 +64,8 @@ namespace Micro_2mom_warm_mod_constants
     template<typename TF> constexpr TF ql_min   = 1.e-6;               // Min cloud liquid water for which calculations are performed
     template<typename TF> constexpr TF qr_min   = 1.e-15;              // Min rain liquid water for which calculations are performed
     template<typename TF> constexpr TF cfl_min  = 1.e-5;               // Small non-zero limit at the CFL number
+    template<typename TF> constexpr TF D_v_arg = 2.21e-5;              // [m2/s], para arg_nact
+    template<typename TF> constexpr TF K_t_arg = 2.4e-2;               // [W/(m K)], para arg_nact
 }
 
 namespace Micro_2mom_warm_mod_functions
@@ -200,6 +202,7 @@ class Microphys_2mom_warm_mod : public Microphys<TF>
         std::vector<std::string> available_masks = {"qr"};   // Vector with the masks that fields can provide
 
         TF Nc0; // Cloud droplet number concentration.
+        bool swprognc; // Se true, nc é prognóstico; se false, fixo em Nc0 (modo validação)
 
         // ====================================================================
         // ADIÇÃO: Parâmetros de aerossol lidos do arquivo de configuração (.ini)
@@ -207,6 +210,7 @@ class Microphys_2mom_warm_mod : public Microphys<TF>
         TF rg_aerosol;   // Raio geométrico médio do aerossol seco (m)
         TF sig_aerosol;  // Desvio-padrão geométrico
         TF kap_aerosol;  // Higroscopicidade (kappa)
+        TF cw;           // Parâmetro de ajuste da TKE
 
         // Surface precipitation statistics
         std::vector<TF> rr_bot;   // 2D surface sedimentation flux (kg m-2 s-1 == mm s-1)

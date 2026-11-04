@@ -30,6 +30,7 @@ namespace Constants
     template<typename TF> constexpr TF e_rot = 7.2921e-5;     // Earth rotation rate [s-1]
     template<typename TF> constexpr TF Rd    = 287.04;        // Gas constant for dry air [J K-1 kg-1]
     template<typename TF> constexpr TF Rv    = 461.5;         // Gas constant for water vapor [J K-1 kg-1]
+    template<typename TF> constexpr TF R     = 8.314462618;   // Universal gas constant [J mol-1 K-1]  <-- NOVO
     template<typename TF> constexpr TF cp    = 1005;          // Specific heat of air at constant pressure [J kg-1 K-1]
     template<typename TF> constexpr TF Lv    = 2.501e6;       // Latent heat of vaporization [J kg-1]
     template<typename TF> constexpr TF Lf    = 3.337e5;       // Latent heat of fusion [J kg-1]

@@ -92,31 +92,48 @@ TF arg_nact(const TF w, const TF T, const TF p, const TF Na,
     if (w <= TF(0) || Na <= TF(0)) return TF(0);
 
     const TF sw = TF(0.0761) - TF(1.55e-4) * (T - TF(273.15));
-    
-    // Acedendo diretamente a Constants::
-    const TF A_kelvin = TF(2) * sw * Constants::Mw<TF> / (Constants::rho_w<TF> * Constants::Rd<TF> * T);
+
+    const TF A_kelvin = TF(2) * sw * Constants::Mw<TF>
+                      / (Constants::rho_w<TF> * Constants::R<TF> * T);
+
     const TF es = Thermo_moist_functions::esat_liq(T);
 
-    const TF alpha = Constants::grav<TF> * Constants::Mw<TF> * Constants::Lv<TF> / (Constants::cp<TF> * Constants::Rd<TF> * T * T) - Constants::grav<TF> * Constants::Md<TF> / (Constants::Rd<TF> * T);
-    const TF gam = Constants::Rd<TF> * T / (es * Constants::Mw<TF>) + Constants::Mw<TF> * Constants::Lv<TF> * Constants::Lv<TF> / (Constants::cp<TF> * p * Constants::Md<TF> * T);
-    
-    // Difusividade de vapor (D_v) e condutividade (K_t) continuam em Micro_2mom_warm_mod_constants
-    const TF G = TF(1) / (Constants::rho_w<TF> * Constants::Rd<TF> * T / (es * Micro_2mom_warm_mod_constants::D_v<TF> * Constants::Mw<TF>) + Constants::Lv<TF> * Constants::rho_w<TF> / (Micro_2mom_warm_mod_constants::K_t<TF> * T) * (Constants::Lv<TF> * Constants::Mw<TF> / (Constants::Rd<TF> * T) - TF(1)));
+    const TF alpha = Constants::grav<TF> * Constants::Mw<TF> * Constants::Lv<TF>
+                     / (Constants::cp<TF> * Constants::R<TF> * T * T)
+                   - Constants::grav<TF> * Constants::Md<TF>
+                     / (Constants::R<TF> * T);
 
-    const TF awG = alpha * w / G;
+    const TF gam = Constants::R<TF> * T / (es * Constants::Mw<TF>)
+                 + Constants::Mw<TF> * Constants::Lv<TF> * Constants::Lv<TF>
+                   / (Constants::cp<TF> * p * Constants::Md<TF> * T);
+
+    const TF G = TF(1) / (
+            Constants::rho_w<TF> * Constants::R<TF> * T
+            / (es * Micro_2mom_warm_mod_constants::D_v_arg<TF> * Constants::Mw<TF>)
+          + Constants::Lv<TF> * Constants::rho_w<TF>
+            / (Micro_2mom_warm_mod_constants::K_t_arg<TF> * T)
+            * (Constants::Lv<TF> * Constants::Mw<TF> / (Constants::R<TF> * T) - TF(1)) );
+
+    const TF awG  = alpha * w / G;
     const TF zeta = (TF(2) * A_kelvin / TF(3)) * std::sqrt(awG);
-    const TF eta = std::pow(awG, TF(1.5)) / (TF(2) * Micro_2mom_warm_mod_constants::pi<TF> * Constants::rho_w<TF> * gam * Na);
-    const TF lns = std::log(sig);
+    const TF eta  = std::pow(awG, TF(1.5))
+                  / (TF(2) * Micro_2mom_warm_mod_constants::pi<TF>
+                     * Constants::rho_w<TF> * gam * Na);
+    const TF lns  = std::log(sig);
 
     const TF sc = TF(2) / std::sqrt(kap) * std::pow(A_kelvin / (TF(3) * rg), TF(1.5));
 
-    const TF f = TF(0.5) * std::exp(TF(2.5) * lns * lns);
+    const TF f     = TF(0.5) * std::exp(TF(2.5) * lns * lns);
     const TF g_fac = TF(1) + TF(0.25) * lns;
 
-    const TF soma = (f * std::pow(zeta / eta, TF(1.5)) + g_fac * std::pow(sc * sc / (eta + TF(3) * zeta), TF(0.75))) / (sc * sc);
+    const TF soma = ( f * std::pow(zeta / eta, TF(1.5))
+                    + g_fac * std::pow(sc * sc / (eta + TF(3) * zeta), TF(0.75)) )
+                    / (sc * sc);
     const TF smax = TF(1) / std::sqrt(soma);
 
-    const TF u = TF(2) * std::log(sc / smax) / (TF(3) * std::sqrt(TF(2)) * lns);
+    const TF u = TF(2) * std::log(sc / smax)
+               / (TF(3) * std::sqrt(TF(2)) * lns);
+
     return TF(0.5) * Na * (TF(1) - std::erf(u));
 }
 
@@ -135,17 +152,20 @@ namespace mp3d
     // Autoconversion: formation of rain drop by coagulating cloud droplets
     template<typename TF>
     void autoconversion(TF* const restrict qrt, TF* const restrict nrt,
-                        TF* const restrict qtt, TF* const restrict thlt,
-                        const TF* const restrict qr,  const TF* const restrict ql,
-                        const TF* const restrict rho, const TF* const restrict exner, const TF nc,
-                        const int istart, const int jstart, const int kstart,
-                        const int iend,   const int jend,   const int kend,
-                        const int jj, const int kk)
+                    TF* const restrict qtt, TF* const restrict thlt,
+                    TF* const restrict nct,
+                    const TF* const restrict qr,  const TF* const restrict ql,
+                    const TF* const restrict nc,
+                    const TF* const restrict rho, const TF* const restrict exner,
+                    const int istart, const int jstart, const int kstart,
+                    const int iend,   const int jend,   const int kend,
+                    const int jj, const int kk)
     {
         const TF x_star = 2.6e-10;       // SB06, list of symbols, same as UCLA-LES
         const TF k_cc   = 9.44e9;        // UCLA-LES (Long, 1974), 4.44e9 in SB06, p48
         const TF nu_c   = 1;             // SB06, Table 1., same as UCLA-LES
         const TF kccxs  = k_cc / (TF(20.) * x_star) * (nu_c+2)*(nu_c+4) / fm::pow2(nu_c+1);
+        const TF sc_c_coef = k_cc * (nu_c + 2) / (nu_c + 1);   // coef. autocoleta de gotículas
 
         for (int k=kstart; k<kend; k++)
             for (int j=jstart; j<jend; j++)
@@ -155,7 +175,8 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF>)
                     {
-                        const TF xc      = rho[k] * ql[ijk] / nc;    // Mean mass of cloud drops [kg]
+                        const TF nc_val = std::max(nc[ijk], TF(1.));
+                        const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
                         const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
                         const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
@@ -163,8 +184,13 @@ namespace mp3d
 
                         qrt[ijk]  += au_tend;
                         nrt[ijk]  += au_tend * rho[k] / x_star;
+                        nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
                         qtt[ijk]  -= au_tend;
                         thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
+
+                        // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
+                        const TF Lc = rho[k] * ql[ijk];
+                        nct[ijk] -= sc_c_coef * Lc * Lc;
                     }
                 }
     }
@@ -172,11 +198,13 @@ namespace mp3d
     // Accreation: growth of raindrops collecting cloud droplets
     template<typename TF>
     void accretion(TF* const restrict qrt, TF* const restrict qtt, TF* const restrict thlt,
-                   const TF* const restrict qr,  const TF* const restrict ql,
-                   const TF* const restrict rho, const TF* const restrict exner,
-                   const int istart, const int jstart, const int kstart,
-                   const int iend,   const int jend,   const int kend,
-                   const int jj, const int kk)
+               TF* const restrict nct,
+               const TF* const restrict qr,  const TF* const restrict ql,
+               const TF* const restrict nc,
+               const TF* const restrict rho, const TF* const restrict exner,
+               const int istart, const int jstart, const int kstart,
+               const int iend,   const int jend,   const int kend,
+               const int jj, const int kk)
     {
         const TF k_cr = 5.25; // SB06, p49
 
@@ -195,6 +223,9 @@ namespace mp3d
                         qrt[ijk]  += ac_tend;
                         qtt[ijk]  -= ac_tend;
                         thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
+
+                        // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
+                        nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
                     }
                 }
     }
@@ -342,7 +373,7 @@ namespace mp2d
                     const TF mr  = rain_mass[ik];
                     const TF dr  = rain_diameter[ik];
 
-                    const TF T   = thl[ijk] * exner[k] + (Lv<TF> * ql[ijk]) / (cp<TF> * exner[k]); // Absolute temperature [K]
+                    const TF T   = thl[ijk] * exner[k] + (Lv<TF> * ql[ijk]) / (cp<TF> * exner[k]); // Absolute temperature [K]   OBS: SERÁ QUE ESTÁ CORRETO? (Eq. 3.6)
                     const TF Glv = TF(1.) / (Rv<TF> * T / (esat_liq(T) * D_v<TF>) +
                                        (Lv<TF> / (K_t<TF> * T)) * (Lv<TF> / (Rv<TF> * T) - TF(1.))); // Cond/evap rate (kg m-1 s-1)?
 
@@ -592,11 +623,13 @@ Microphys_2mom_warm_mod<TF>::Microphys_2mom_warm_mod(Master& masterin, Grid<TF>&
     swmicrobudget = inputin.get_item<bool>("micro", "swmicrobudget", "", false);
     cflmax = inputin.get_item<TF>("micro", "cflmax", "", 2.);
     Nc0 = inputin.get_item<TF>("micro", "Nc0", "");
+    swprognc = inputin.get_item<bool>("micro", "swprognc", "", false);
 
     // Ler os parâmetros de aerossol da secção [micro] do ficheiro .ini
     rg_aerosol  = inputin.get_item<TF>("micro", "rg_aerosol", "", 0.05e-6); // Padrão: 0.05 um
     sig_aerosol = inputin.get_item<TF>("micro", "sig_aerosol", "", 1.8);
     kap_aerosol = inputin.get_item<TF>("micro", "kap_aerosol", "", 0.6);
+    cw = inputin.get_item<TF>("micro", "cw", "", 0.7);
 
     // Initialize the qr (rain water specific humidity) and nr (droplot number concentration) fields
     const std::string group_name = "thermo";
@@ -604,11 +637,13 @@ Microphys_2mom_warm_mod<TF>::Microphys_2mom_warm_mod(Master& masterin, Grid<TF>&
     fields.init_prognostic_field("qr", "Rain water specific humidity", "kg kg-1", group_name, gd.sloc, false);
     fields.init_prognostic_field("nr", "Number density rain", "m-3", group_name, gd.sloc, false);
     fields.init_prognostic_field("na", "Number density unactivated aerosols", "m-3", group_name, gd.sloc, false); // Inicialização do campo prognóstico de aerossóis não ativados
+    fields.init_prognostic_field("nc", "Number density cloud droplets", "m-3", group_name, gd.sloc, false);  // Inicialização do campo prognóstico de gotículas de nuvem
 
     // Load the viscosity for both fields.
     fields.sp.at("qr")->visc = inputin.get_item<TF>("fields", "svisc", "qr");
     fields.sp.at("nr")->visc = inputin.get_item<TF>("fields", "svisc", "nr");
     fields.sp.at("na")->visc = inputin.get_item<TF>("fields", "svisc", "na");
+    fields.sp.at("nc")->visc = inputin.get_item<TF>("fields", "svisc", "nc");
 }
 
 template<typename TF>
@@ -622,6 +657,9 @@ void Microphys_2mom_warm_mod<TF>::init()
     auto& gd = grid.get_grid_data();
 
     rr_bot.resize(gd.ijcells);     // 2D surface sedimentation flux (rain rate)
+
+    if (swprognc)
+    std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
 }
 
 template<typename TF>
@@ -640,11 +678,11 @@ void Microphys_2mom_warm_mod<TF>::create(
         // Time series
         stats.add_time_series("rr", "Mean surface rain rate", "kg m-2 s-1", group_name);
         stats.add_profs(*fields.sp.at("qr"), "z", {"frac", "cover"}, group_name);
-        stats.add_profs(*fields.sp.at("na"), "z", {"frac", "cover"}, group_name); // <--- Adicionado perfil para na
+        
 
         if (swmicrobudget)
         {
-            // Microphysics tendencies for qr, nr, thl and qt
+            // Microphysics tendencies for qr, nr, thl qt and nc
             stats.add_prof("sed_qrt", "Sedimentation tendency of qr", "kg kg-1 s-1", "z", group_name);
             stats.add_prof("sed_nrt", "Sedimentation tendency of nr", "m3 s-1", "z", group_name);
 
@@ -652,6 +690,7 @@ void Microphys_2mom_warm_mod<TF>::create(
             stats.add_prof("auto_nrt" , "Autoconversion tendency nr",  "m-3 s-1", "z", group_name);
             stats.add_prof("auto_thlt", "Autoconversion tendency thl", "K s-1", "z", group_name);
             stats.add_prof("auto_qtt" , "Autoconversion tendency qt",  "kg kg-1 s-1", "z", group_name);
+            stats.add_prof("auto_nct", "Autoconversion tendency nc", "m-3 s-1", "z", group_name);
 
             stats.add_prof("evap_qrt" , "Evaporation tendency qr",  "kg kg-1 s-1", "z", group_name);
             stats.add_prof("evap_nrt" , "Evaporation tendency nr",  "m-3 s-1", "z", group_name);
@@ -663,13 +702,16 @@ void Microphys_2mom_warm_mod<TF>::create(
             stats.add_prof("accr_qrt" , "Accretion tendency qr",  "kg kg-1 s-1", "z", group_name);
             stats.add_prof("accr_thlt", "Accretion tendency thl", "K s-1", "z", group_name);
             stats.add_prof("accr_qtt" , "Accretion tendency qt",  "kg kg-1 s-1", "z", group_name);
+            stats.add_prof("accr_nct", "Accretion tendency nc",      "m-3 s-1", "z", group_name);
+
         }
 
         stats.add_tendency(*fields.st.at("thl"), "z", tend_name, tend_longname);
         stats.add_tendency(*fields.st.at("qt") , "z", tend_name, tend_longname);
         stats.add_tendency(*fields.st.at("qr") , "z", tend_name, tend_longname);
         stats.add_tendency(*fields.st.at("nr") , "z", tend_name, tend_longname);
-        stats.add_tendency(*fields.st.at("na") , "z", tend_name, tend_longname); // <--- CORREÇÃO: Registra a tendência de na
+        stats.add_tendency(*fields.st.at("na") , "z", tend_name, tend_longname);
+        stats.add_tendency(*fields.st.at("nc") , "z", tend_name, tend_longname);
     }
 
     // Add variables to column statistics
@@ -699,6 +741,11 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     remove_negative_values(fields.sp.at("nr")->fld.data(), gd.istart, gd.jstart, gd.kstart,
                            gd.iend, gd.jend, gd.kend, gd.icells, gd.ijcells);
 
+
+    // -------------------------------------------------------------
+    // CÁLCULO DA ATIVAÇÃO DE AEROSSÓIS (ARG + KAPPA-KÖHLER)
+    // -------------------------------------------------------------
+    
     // Get cloud liquid water specific humidity from thermodynamics
     auto ql = fields.get_tmp();
     thermo.get_thermo_field(*ql, "qlqi", false, false);
@@ -707,44 +754,88 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     std::vector<TF> p     = thermo.get_basestate_vector("p");
     std::vector<TF> exner = thermo.get_basestate_vector("exner");
 
+    // Remover valores negativos em nc (proteção contra tendências numéricas)
+    remove_negative_values(fields.sp.at("nc")->fld.data(), gd.istart, gd.jstart, gd.kstart,
+                           gd.iend, gd.jend, gd.kend, gd.icells, gd.ijcells);
+
     // Obter velocidade vertical (w) e campos para velocidade efetiva wef
     const TF* const restrict w = fields.mp.at("w")->fld.data();  // modificado de sp para mp
     const TF* const restrict thl = fields.sp.at("thl")->fld.data();
 
     TF* const restrict nat = fields.st.at("na")->fld.data();
     TF* const restrict na  = fields.sp.at("na")->fld.data();
+    TF* const restrict nct = fields.st.at("nc")->fld.data();
+    TF* const restrict nc  = fields.sp.at("nc")->fld.data();
 
-    // -------------------------------------------------------------
-    // CÁLCULO DA ATIVAÇÃO DE AEROSSÓIS (ARG + KAPPA-KÖHLER)
-    // -------------------------------------------------------------
-    for (int k = gd.kstart; k < gd.kend; ++k)
+    // TKE de sub-grade (só existe com fechamento 1.5). Caso contrário, e_sgs = 0.
+    TF* sgs_tke = nullptr;
+    try { sgs_tke = fields.sp.at("sgstke")->fld.data(); }
+    catch (const std::out_of_range&) { sgs_tke = nullptr; }
+
+    if (swprognc)
     {
-        const TF p0_k = p[k];
-
-        for (int j = gd.jstart; j < gd.jend; ++j)
-            #pragma ivdep
-            for (int i = gd.istart; i < gd.iend; ++i)
-            {
-                const int ijk = i + j * gd.icells + k * gd.ijcells;
-
-                // Ativação ocorre apenas onde há água de nuvem e movimento ascendente
-                if (ql->fld[ijk] > TF(0) && w[ijk] > TF(0))
+        //-----------------------------------------------------------------
+        // E_nc: devolve gotículas a na onde a nuvem evaporou
+        // -----------------------------------------------------------------
+        for (int k = gd.kstart; k < gd.kend; ++k)
+            for (int j = gd.jstart; j < gd.jend; ++j)
+                #pragma ivdep
+                for (int i = gd.istart; i < gd.iend; ++i)
                 {
-                    // Velocidade efetiva (w + contribuição da turbulência)
-                    const TF wef = w[ijk]; // Pode acrescentar + cw * sqrt(2e/3) se a TKE estiver ativa
-                    const TF Temp = thl[ijk] * exner[k] + (Constants::Lv<TF> * ql->fld[ijk]) / (Constants::cp<TF> * exner[k]);
-                    const TF Ntot = na[ijk] + Nc0; // População total disponível
-
-                    // Calcular N_act em m-3
-                    const TF Nact = arg_nact(wef, Temp, p0_k, Ntot, rg_aerosol, sig_aerosol, kap_aerosol);
-
-                    // Taxa de ativação A_act (m-3 s-1)
-                    const TF A_act = std::max(TF(0), Nact - Nc0) / TF(dt);
-
-                    // Atualizar tendências: consome aerossol 'na'
-                    nat[ijk] -= A_act;
+                    const int ijk = i + j*gd.icells + k*gd.ijcells;
+                    if (ql->fld[ijk] < ql_min<TF> && nc[ijk] > TF(0))
+                    {
+                        const TF E_nc = nc[ijk] / TF(dt);
+                        nat[ijk] += E_nc;
+                        nct[ijk] -= E_nc;
+                    }
                 }
-            }
+
+        // -----------------------------------------------------------------
+        // Ativação (usa nc do campo, não Nc0)
+        // -----------------------------------------------------------------
+        for (int k = gd.kstart; k < gd.kend; ++k)
+        {
+            const TF p0_k = p[k];
+            for (int j = gd.jstart; j < gd.jend; ++j)
+                #pragma ivdep
+                for (int i = gd.istart; i < gd.iend; ++i)
+                {
+                    const int ijk = i + j*gd.icells + k*gd.ijcells;
+
+                    // Ativação ocorre apenas onde há água de nuvem e movimento ascendente
+                    if (ql->fld[ijk] > ql_min<TF> && w[ijk] > TF(0))
+                    {
+                        // Velocidade efetiva (w + contribuição da turbulência)
+                        const TF e_sgs = (sgs_tke != nullptr) ? std::max(TF(0), sgs_tke[ijk]) : TF(0);
+                        const TF wef   = w[ijk] + cw * std::sqrt(TF(2) * e_sgs / TF(3));
+
+                        const TF Temp  = thl[ijk] * exner[k]
+                                    + Constants::Lv<TF> * ql->fld[ijk] / (Constants::cp<TF> * exner[k]); // DIFERENTE DA Eq. 3.6
+                        const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível
+
+                        // Calcular N_act (m-3)
+                        const TF Nact  = arg_nact(wef, Temp, p0_k, Ntot,
+                                                rg_aerosol, sig_aerosol, kap_aerosol);
+
+                        // Taxa de ativação A_act (m-3 s-1)
+                        const TF A_act = std::min(
+                                std::max(TF(0), Nact - nc[ijk]) / TF(dt),
+                                na[ijk] / TF(dt) );
+
+                        // Atualizar tendências: consome aerossol 'na' e aumenta gotículas 'nc'
+                        nat[ijk] -= A_act;
+                        nct[ijk] += A_act;
+                    }
+                }
+        }
+    }
+    else
+    {
+        // -----------------------------------------------------------------
+        // 2. Modo validação: fixar nc = Nc0 em todos os pontos
+        // -----------------------------------------------------------------
+        std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
     }
 
     // Microphysics is handled in XZ slices, to
@@ -784,16 +875,24 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     // Calculate microphysics tendencies
     // ---------------------------------
 
-    // Autoconversion; formation of rain drop by coagulating cloud droplets
-    mp3d::autoconversion(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(), fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                         fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(), Nc0,
-                         gd.istart, gd.jstart, gd.kstart,
-                         gd.iend,   gd.jend,   gd.kend,
-                         gd.icells, gd.ijcells);
+    // Autoconversion; formation of rain drop by coagulating cloud droplets    
+    mp3d::autoconversion(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(),
+                     fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                     nct,
+                     fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                     nc,
+                     fields.rhoref.data(), exner.data(),
+                     gd.istart, gd.jstart, gd.kstart,
+                     gd.iend,   gd.jend,   gd.kend,
+                     gd.icells, gd.ijcells);
 
     // Accretion; growth of raindrops collecting cloud droplets
-    mp3d::accretion(fields.st.at("qr")->fld.data(), fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                    fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(),
+    mp3d::accretion(fields.st.at("qr")->fld.data(),
+                    fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                    nct,
+                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                    nc,
+                    fields.rhoref.data(), exner.data(),
                     gd.istart, gd.jstart, gd.kstart,
                     gd.iend,   gd.jend,   gd.kend,
                     gd.icells, gd.ijcells);
@@ -843,6 +942,12 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     stats.calc_tend(*fields.st.at("qt"),  tend_name);
     stats.calc_tend(*fields.st.at("qr"),  tend_name);
     stats.calc_tend(*fields.st.at("nr"),  tend_name);
+
+    // Em modo validação, zera a tendência para nc ficar fixo em Nc0
+    if (!swprognc)
+        std::fill(fields.st.at("nc")->fld.begin(), fields.st.at("nc")->fld.end(), TF(0));
+
+    stats.calc_tend(*fields.st.at("nc"), tend_name);
 }
 #endif
 
@@ -904,15 +1009,17 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
         TF* lambda_r = get_tmp_slice<TF>(tmp_fields, slice_counter, gd.jcells, ikcells);
         TF* mu_r     = get_tmp_slice<TF>(tmp_fields, slice_counter, gd.jcells, ikcells);
 
-        // Get 4 tmp fields for all tendencies (qrt, nrt, thlt, qtt) :-(
+        // Get 5 tmp fields for all tendencies (qrt, nrt, thlt, qtt, nct) :-(
         auto qrt  = fields.get_tmp();
         auto nrt  = fields.get_tmp();
         auto thlt = fields.get_tmp();
         auto qtt  = fields.get_tmp();
+        auto nct_stat = fields.get_tmp();
         qrt->loc  = gd.sloc;
         nrt->loc  = gd.sloc;
         thlt->loc = gd.sloc;
         qtt->loc  = gd.sloc;
+        nct_stat->loc = gd.sloc;
 
         // Calculate tendencies
         // Autoconversion; formation of rain drop by coagulating cloud droplets
@@ -921,33 +1028,44 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
         zero_field(nrt->fld.data(),  gd.ncells);
         zero_field(thlt->fld.data(), gd.ncells);
         zero_field(qtt->fld.data(),  gd.ncells);
+        zero_field(nct_stat->fld.data(),  gd.ncells);
 
-        mp3d::autoconversion(qrt->fld.data(), nrt->fld.data(), qtt->fld.data(), thlt->fld.data(),
-                             fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(), Nc0,
-                             gd.istart, gd.jstart, gd.kstart,
-                             gd.iend,   gd.jend,   gd.kend,
-                             gd.icells, gd.ijcells);
+        mp3d::autoconversion(qrt->fld.data(), nrt->fld.data(),
+                    qtt->fld.data(), thlt->fld.data(),
+                    nct_stat->fld.data(),
+                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                    fields.sp.at("nc")->fld.data(),
+                    fields.rhoref.data(), exner.data(),
+                    gd.istart, gd.jstart, gd.kstart,
+                    gd.iend,   gd.jend,   gd.kend,
+                    gd.icells, gd.ijcells);
 
         stats.calc_stats("auto_qrt" , *qrt , no_offset, no_threshold);
         stats.calc_stats("auto_nrt" , *nrt , no_offset, no_threshold);
         stats.calc_stats("auto_thlt", *thlt, no_offset, no_threshold);
         stats.calc_stats("auto_qtt" , *qtt , no_offset, no_threshold);
+        stats.calc_stats("auto_nct", *nct_stat, no_offset, no_threshold);
 
         // Accretion; growth of raindrops collecting cloud droplets
         // -------------------------
         zero_field(qrt->fld.data(),  gd.ncells);
         zero_field(thlt->fld.data(), gd.ncells);
         zero_field(qtt->fld.data(),  gd.ncells);
+        zero_field(nct_stat->fld.data(),  gd.ncells);
 
         mp3d::accretion(qrt->fld.data(), qtt->fld.data(), thlt->fld.data(),
-                        fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(),
-                        gd.istart, gd.jstart, gd.kstart,
-                        gd.iend,   gd.jend,   gd.kend,
-                        gd.icells, gd.ijcells);
+                    nct_stat->fld.data(),
+                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                    fields.sp.at("nc")->fld.data(),
+                    fields.rhoref.data(), exner.data(),
+                    gd.istart, gd.jstart, gd.kstart,
+                    gd.iend,   gd.jend,   gd.kend,
+                    gd.icells, gd.ijcells);
 
         stats.calc_stats("accr_qrt" , *qrt , no_offset, no_threshold);
         stats.calc_stats("accr_thlt", *thlt, no_offset, no_threshold);
         stats.calc_stats("accr_qtt" , *qtt , no_offset, no_threshold);
+        stats.calc_stats("accr_nct", *nct_stat, no_offset, no_threshold);
 
         // Rest of the microphysics is handled per XZ slice
         // Evaporation; evaporation of rain drops in unsaturated environment
@@ -1028,6 +1146,7 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
         fields.release_tmp(nrt );
         fields.release_tmp(thlt);
         fields.release_tmp(qtt );
+        fields.release_tmp(nct_stat);
     }
 }
 

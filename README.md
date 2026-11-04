@@ -32,7 +32,7 @@ Downloading the code
 --------------------
 MicroHH includes Git submodules, so it is essential to ensure these are downloaded properly when cloning the code. Check out the code with all submodules included using:
 
-    git clone --recurse-submodules https://github.com/microhh/microhh.git
+    git clone --recurse-submodules https://github.com/alecnatanael/microhh_microphys_mod.git
 
 If you get compilation errors related to missing RTE+RRTMGP source files, you probably forgot the `--recurse-submodules` flag. You can correct that with:
 
