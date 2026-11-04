@@ -640,6 +640,7 @@ void Microphys_2mom_warm_mod<TF>::create(
         // Time series
         stats.add_time_series("rr", "Mean surface rain rate", "kg m-2 s-1", group_name);
         stats.add_profs(*fields.sp.at("qr"), "z", {"frac", "cover"}, group_name);
+        stats.add_profs(*fields.sp.at("na"), "z", {"frac", "cover"}, group_name); // <--- Adicionado perfil para na
 
         if (swmicrobudget)
         {
@@ -668,6 +669,7 @@ void Microphys_2mom_warm_mod<TF>::create(
         stats.add_tendency(*fields.st.at("qt") , "z", tend_name, tend_longname);
         stats.add_tendency(*fields.st.at("qr") , "z", tend_name, tend_longname);
         stats.add_tendency(*fields.st.at("nr") , "z", tend_name, tend_longname);
+        stats.add_tendency(*fields.st.at("na") , "z", tend_name, tend_longname); // <--- CORREÇÃO: Registra a tendência de na
     }
 
     // Add variables to column statistics
@@ -706,7 +708,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     std::vector<TF> exner = thermo.get_basestate_vector("exner");
 
     // Obter velocidade vertical (w) e campos para velocidade efetiva wef
-    const TF* const restrict w = fields.sp.at("w")->fld.data();
+    const TF* const restrict w = fields.mp.at("w")->fld.data();  // modificado de sp para mp
     const TF* const restrict thl = fields.sp.at("thl")->fld.data();
 
     TF* const restrict nat = fields.st.at("na")->fld.data();

@@ -1,3 +1,11 @@
+import sys
+import os
+
+# Obtém o diretório atual do script e chega até a pasta 'python' na raiz do repositório
+script_dir = os.path.dirname(os.path.abspath(__file__))
+python_path = os.path.abspath(os.path.join(script_dir, "../../python"))
+sys.path.append(python_path)
+
 import numpy as np
 import netCDF4 as nc
 import microhh_tools as mht
