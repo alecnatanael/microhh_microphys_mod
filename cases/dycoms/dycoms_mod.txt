@@ -43,10 +43,15 @@ lslist=thl,qt
 swwls=mean
 
 [micro]
-swmicro=2mom_warm
+swmicro=2mom_warm_mod
 swmicrobudget=1
 cflmax=0.8
 Nc0=70e6
+swprognc=false            
+rg_aerosol=0.05e-6
+sig_aerosol=1.8
+kap_aerosol=0.6
+cw=0.7
 
 [boundary]
 mbcbot=noslip
