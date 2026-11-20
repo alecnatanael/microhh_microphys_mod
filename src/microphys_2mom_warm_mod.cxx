@@ -157,6 +157,7 @@ namespace mp3d
                     const TF* const restrict qr,  const TF* const restrict ql,
                     const TF* const restrict nc,
                     const TF* const restrict rho, const TF* const restrict exner,
+                    const bool swprognc, const TF Nc0,
                     const int istart, const int jstart, const int kstart,
                     const int iend,   const int jend,   const int kend,
                     const int jj, const int kk)
@@ -175,22 +176,36 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF>)
                     {
-                        const TF nc_val = std::max(nc[ijk], TF(1.));
-                        const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
-                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
-                        const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
-                        const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
-                                               (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
+                        if (!swprognc) {
+                            const TF xc      = rho[k] * ql[ijk] / Nc0;    // Mean mass of cloud drops [kg]
+                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
+                            const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
+                            const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
+                                                (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
 
-                        qrt[ijk]  += au_tend;
-                        nrt[ijk]  += au_tend * rho[k] / x_star;
-                        nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
-                        qtt[ijk]  -= au_tend;
-                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
+                            qrt[ijk]  += au_tend;
+                            nrt[ijk]  += au_tend * rho[k] / x_star;
+                            qtt[ijk]  -= au_tend;
+                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
+                        }
+                        else {
+                            const TF nc_val = std::max(nc[ijk], TF(1.));
+                            const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
+                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
+                            const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
+                            const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
+                                                (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
 
-                        // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
-                        const TF Lc = rho[k] * ql[ijk];
-                        nct[ijk] -= sc_c_coef * Lc * Lc;
+                            qrt[ijk]  += au_tend;
+                            nrt[ijk]  += au_tend * rho[k] / x_star;
+                            nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
+                            qtt[ijk]  -= au_tend;
+                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
+
+                            // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
+                            const TF Lc = rho[k] * ql[ijk];
+                            nct[ijk] -= sc_c_coef * Lc * Lc;
+                        }
                     }
                 }
     }
@@ -202,6 +217,7 @@ namespace mp3d
                const TF* const restrict qr,  const TF* const restrict ql,
                const TF* const restrict nc,
                const TF* const restrict rho, const TF* const restrict exner,
+               const bool swprognc, const TF Nc0,
                const int istart, const int jstart, const int kstart,
                const int iend,   const int jend,   const int kend,
                const int jj, const int kk)
@@ -216,16 +232,27 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF> && qr[ijk] > qr_min<TF>)
                     {
-                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
-                        const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
-                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+                        if (!swprognc) {
+                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
+                            const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
+                            const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
 
-                        qrt[ijk]  += ac_tend;
-                        qtt[ijk]  -= ac_tend;
-                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
+                            qrt[ijk]  += ac_tend;
+                            qtt[ijk]  -= ac_tend;
+                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
+                        }
+                        else {
+                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
+                            const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
+                            const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
 
-                        // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
-                        nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
+                            qrt[ijk]  += ac_tend;
+                            qtt[ijk]  -= ac_tend;
+                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
+
+                            // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
+                            nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
+                        }
                     }
                 }
     }
@@ -658,7 +685,6 @@ void Microphys_2mom_warm_mod<TF>::init()
 
     rr_bot.resize(gd.ijcells);     // 2D surface sedimentation flux (rain rate)
 
-    if (swprognc)
     std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
 }
 
@@ -882,6 +908,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
                      fields.sp.at("qr")->fld.data(), ql->fld.data(),
                      nc,
                      fields.rhoref.data(), exner.data(),
+                     swprognc, Nc0,
                      gd.istart, gd.jstart, gd.kstart,
                      gd.iend,   gd.jend,   gd.kend,
                      gd.icells, gd.ijcells);
@@ -893,6 +920,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
                     fields.sp.at("qr")->fld.data(), ql->fld.data(),
                     nc,
                     fields.rhoref.data(), exner.data(),
+                    swprognc, Nc0,
                     gd.istart, gd.jstart, gd.kstart,
                     gd.iend,   gd.jend,   gd.kend,
                     gd.icells, gd.ijcells);
@@ -943,9 +971,6 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     stats.calc_tend(*fields.st.at("qr"),  tend_name);
     stats.calc_tend(*fields.st.at("nr"),  tend_name);
 
-    // Em modo validação, zera a tendência para nc ficar fixo em Nc0
-    if (!swprognc)
-        std::fill(fields.st.at("nc")->fld.begin(), fields.st.at("nc")->fld.end(), TF(0));
 
     stats.calc_tend(*fields.st.at("nc"), tend_name);
 }
@@ -1036,6 +1061,7 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
                     fields.sp.at("qr")->fld.data(), ql->fld.data(),
                     fields.sp.at("nc")->fld.data(),
                     fields.rhoref.data(), exner.data(),
+                    swprognc, Nc0,
                     gd.istart, gd.jstart, gd.kstart,
                     gd.iend,   gd.jend,   gd.kend,
                     gd.icells, gd.ijcells);
@@ -1058,6 +1084,7 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
                     fields.sp.at("qr")->fld.data(), ql->fld.data(),
                     fields.sp.at("nc")->fld.data(),
                     fields.rhoref.data(), exner.data(),
+                    swprognc, Nc0,
                     gd.istart, gd.jstart, gd.kstart,
                     gd.iend,   gd.jend,   gd.kend,
                     gd.icells, gd.ijcells);
