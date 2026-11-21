@@ -149,15 +149,82 @@ namespace mp3d
 {
     namespace fm = Fast_math;
 
-    // Autoconversion: formation of rain drop by coagulating cloud droplets
+    // Autoconversion: formation of rain drop by coagulating cloud droplets [swprognc=false]
     template<typename TF>
-    void autoconversion(TF* const restrict qrt, TF* const restrict nrt,
+    void autoconversion_orig(TF* const restrict qrt, TF* const restrict nrt,
+                        TF* const restrict qtt, TF* const restrict thlt,
+                        const TF* const restrict qr,  const TF* const restrict ql,
+                        const TF* const restrict rho, const TF* const restrict exner, const TF nc,
+                        const int istart, const int jstart, const int kstart,
+                        const int iend,   const int jend,   const int kend,
+                        const int jj, const int kk)
+    {
+        const TF x_star = 2.6e-10;       // SB06, list of symbols, same as UCLA-LES
+        const TF k_cc   = 9.44e9;        // UCLA-LES (Long, 1974), 4.44e9 in SB06, p48
+        const TF nu_c   = 1;             // SB06, Table 1., same as UCLA-LES
+        const TF kccxs  = k_cc / (TF(20.) * x_star) * (nu_c+2)*(nu_c+4) / fm::pow2(nu_c+1);
+
+        for (int k=kstart; k<kend; k++)
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    if (ql[ijk] > ql_min<TF>)
+                    {
+                        const TF xc      = rho[k] * ql[ijk] / nc;    // Mean mass of cloud drops [kg]
+                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
+                        const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
+                        const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
+                                               (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
+
+                        qrt[ijk]  += au_tend;
+                        nrt[ijk]  += au_tend * rho[k] / x_star;
+                        qtt[ijk]  -= au_tend;
+                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
+                    }
+                }
+    }
+
+    // Accreation: growth of raindrops collecting cloud droplets [swprognc=false]
+    template<typename TF>
+    void accretion_orig(TF* const restrict qrt, TF* const restrict qtt, TF* const restrict thlt,
+                   const TF* const restrict qr,  const TF* const restrict ql,
+                   const TF* const restrict rho, const TF* const restrict exner,
+                   const int istart, const int jstart, const int kstart,
+                   const int iend,   const int jend,   const int kend,
+                   const int jj, const int kk)
+    {
+        const TF k_cr = 5.25; // SB06, p49
+
+        for (int k=kstart; k<kend; k++)
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    if (ql[ijk] > ql_min<TF> && qr[ijk] > qr_min<TF>)
+                    {
+                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
+                        const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
+                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+
+                        qrt[ijk]  += ac_tend;
+                        qtt[ijk]  -= ac_tend;
+                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
+                    }
+                }
+    }
+
+
+    // Autoconversion: formation of rain drop by coagulating cloud droplets [swprognc=true]
+    template<typename TF>
+    void autoconversion_prog(TF* const restrict qrt, TF* const restrict nrt,
                     TF* const restrict qtt, TF* const restrict thlt,
                     TF* const restrict nct,
                     const TF* const restrict qr,  const TF* const restrict ql,
                     const TF* const restrict nc,
                     const TF* const restrict rho, const TF* const restrict exner,
-                    const bool swprognc, const TF Nc0,
                     const int istart, const int jstart, const int kstart,
                     const int iend,   const int jend,   const int kend,
                     const int jj, const int kk)
@@ -176,48 +243,33 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF>)
                     {
-                        if (!swprognc) {
-                            const TF xc      = rho[k] * ql[ijk] / Nc0;    // Mean mass of cloud drops [kg]
-                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
-                            const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
-                            const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
-                                                (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
+                        const TF nc_val = std::max(nc[ijk], TF(1.));
+                        const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
+                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
+                        const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
+                        const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
+                                            (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
 
-                            qrt[ijk]  += au_tend;
-                            nrt[ijk]  += au_tend * rho[k] / x_star;
-                            qtt[ijk]  -= au_tend;
-                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
-                        }
-                        else {
-                            const TF nc_val = std::max(nc[ijk], TF(1.));
-                            const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
-                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
-                            const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
-                            const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
-                                                (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
+                        qrt[ijk]  += au_tend;
+                        nrt[ijk]  += au_tend * rho[k] / x_star;
+                        nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
+                        qtt[ijk]  -= au_tend;
+                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
 
-                            qrt[ijk]  += au_tend;
-                            nrt[ijk]  += au_tend * rho[k] / x_star;
-                            nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
-                            qtt[ijk]  -= au_tend;
-                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
-
-                            // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
-                            const TF Lc = rho[k] * ql[ijk];
-                            nct[ijk] -= sc_c_coef * Lc * Lc;
-                        }
+                        // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
+                        const TF Lc = rho[k] * ql[ijk];
+                        nct[ijk] -= sc_c_coef * Lc * Lc;
                     }
                 }
     }
 
-    // Accreation: growth of raindrops collecting cloud droplets
+    // Accreation: growth of raindrops collecting cloud droplets [swprognc=true]
     template<typename TF>
-    void accretion(TF* const restrict qrt, TF* const restrict qtt, TF* const restrict thlt,
+    void accretion_prog(TF* const restrict qrt, TF* const restrict qtt, TF* const restrict thlt,
                TF* const restrict nct,
                const TF* const restrict qr,  const TF* const restrict ql,
                const TF* const restrict nc,
                const TF* const restrict rho, const TF* const restrict exner,
-               const bool swprognc, const TF Nc0,
                const int istart, const int jstart, const int kstart,
                const int iend,   const int jend,   const int kend,
                const int jj, const int kk)
@@ -232,27 +284,16 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF> && qr[ijk] > qr_min<TF>)
                     {
-                        if (!swprognc) {
-                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
-                            const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
-                            const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+                        const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
+                        const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
+                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
 
-                            qrt[ijk]  += ac_tend;
-                            qtt[ijk]  -= ac_tend;
-                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
-                        }
-                        else {
-                            const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
-                            const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
-                            const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+                        qrt[ijk]  += ac_tend;
+                        qtt[ijk]  -= ac_tend;
+                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
 
-                            qrt[ijk]  += ac_tend;
-                            qtt[ijk]  -= ac_tend;
-                            thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
-
-                            // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
-                            nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
-                        }
+                        // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
+                        nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
                     }
                 }
     }
@@ -901,29 +942,50 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     // Calculate microphysics tendencies
     // ---------------------------------
 
-    // Autoconversion; formation of rain drop by coagulating cloud droplets    
-    mp3d::autoconversion(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(),
-                     fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                     nct,
-                     fields.sp.at("qr")->fld.data(), ql->fld.data(),
-                     nc,
-                     fields.rhoref.data(), exner.data(),
-                     swprognc, Nc0,
-                     gd.istart, gd.jstart, gd.kstart,
-                     gd.iend,   gd.jend,   gd.kend,
-                     gd.icells, gd.ijcells);
+    if (!swprognc) {
+        // Chama a função original bit-a-bit
+        // Autoconversion; formation of rain drop by coagulating cloud droplets    
+        mp3d::autoconversion_orig(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(),
+                        fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                        fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                        fields.rhoref.data(), exner.data(),
+                        Nc0,
+                        gd.istart, gd.jstart, gd.kstart,
+                        gd.iend,   gd.jend,   gd.kend,
+                        gd.icells, gd.ijcells);
 
-    // Accretion; growth of raindrops collecting cloud droplets
-    mp3d::accretion(fields.st.at("qr")->fld.data(),
-                    fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                    nct,
-                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
-                    nc,
-                    fields.rhoref.data(), exner.data(),
-                    swprognc, Nc0,
-                    gd.istart, gd.jstart, gd.kstart,
-                    gd.iend,   gd.jend,   gd.kend,
-                    gd.icells, gd.ijcells);
+        // Accretion; growth of raindrops collecting cloud droplets
+        mp3d::accretion_orig(fields.st.at("qr")->fld.data(),
+                        fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                        fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                        fields.rhoref.data(), exner.data(),
+                        gd.istart, gd.jstart, gd.kstart,
+                        gd.iend,   gd.jend,   gd.kend,
+                        gd.icells, gd.ijcells);
+    } else {
+        // Chama as funções prognósticas
+        // Autoconversion; formation of rain drop by coagulating cloud droplets    
+        mp3d::autoconversion_prog(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(),
+                        fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                        nct,
+                        fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                        nc,
+                        fields.rhoref.data(), exner.data(),
+                        gd.istart, gd.jstart, gd.kstart,
+                        gd.iend,   gd.jend,   gd.kend,
+                        gd.icells, gd.ijcells);
+
+        // Accretion; growth of raindrops collecting cloud droplets
+        mp3d::accretion_prog(fields.st.at("qr")->fld.data(),
+                        fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+                        nct,
+                        fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                        nc,
+                        fields.rhoref.data(), exner.data(),
+                        gd.istart, gd.jstart, gd.kstart,
+                        gd.iend,   gd.jend,   gd.kend,
+                        gd.icells, gd.ijcells);
+    }
 
     // Rest of the microphysics is handled per XZ slice
     for (int j=gd.jstart; j<gd.jend; ++j)
@@ -1055,16 +1117,29 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
         zero_field(qtt->fld.data(),  gd.ncells);
         zero_field(nct_stat->fld.data(),  gd.ncells);
 
-        mp3d::autoconversion(qrt->fld.data(), nrt->fld.data(),
-                    qtt->fld.data(), thlt->fld.data(),
-                    nct_stat->fld.data(),
-                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
-                    fields.sp.at("nc")->fld.data(),
-                    fields.rhoref.data(), exner.data(),
-                    swprognc, Nc0,
-                    gd.istart, gd.jstart, gd.kstart,
-                    gd.iend,   gd.jend,   gd.kend,
-                    gd.icells, gd.ijcells);
+
+        if (!swprognc) {
+            // Chama a função original bit-a-bit    
+            mp3d::autoconversion_orig(qrt->fld.data(), nrt->fld.data(),
+                            qtt->fld.data(), thlt->fld.data(),
+                            fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                            fields.rhoref.data(), exner.data(),
+                            Nc0,
+                            gd.istart, gd.jstart, gd.kstart,
+                            gd.iend,   gd.jend,   gd.kend,
+                            gd.icells, gd.ijcells);
+        } else {
+            // Chama a função prognóstica   
+            mp3d::autoconversion_prog(qrt->fld.data(), nrt->fld.data(),
+                            qtt->fld.data(), thlt->fld.data(),
+                            nct_stat->fld.data(),
+                            fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                            fields.sp.at("nc")->fld.data(),
+                            fields.rhoref.data(), exner.data(),
+                            gd.istart, gd.jstart, gd.kstart,
+                            gd.iend,   gd.jend,   gd.kend,
+                            gd.icells, gd.ijcells);
+        }
 
         stats.calc_stats("auto_qrt" , *qrt , no_offset, no_threshold);
         stats.calc_stats("auto_nrt" , *nrt , no_offset, no_threshold);
@@ -1079,15 +1154,25 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
         zero_field(qtt->fld.data(),  gd.ncells);
         zero_field(nct_stat->fld.data(),  gd.ncells);
 
-        mp3d::accretion(qrt->fld.data(), qtt->fld.data(), thlt->fld.data(),
-                    nct_stat->fld.data(),
-                    fields.sp.at("qr")->fld.data(), ql->fld.data(),
-                    fields.sp.at("nc")->fld.data(),
-                    fields.rhoref.data(), exner.data(),
-                    swprognc, Nc0,
-                    gd.istart, gd.jstart, gd.kstart,
-                    gd.iend,   gd.jend,   gd.kend,
-                    gd.icells, gd.ijcells);
+        if (!swprognc) {
+            // Chama a função original bit-a-bit    
+            mp3d::accretion_orig(qrt->fld.data(), qtt->fld.data(), thlt->fld.data(),
+                            fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                            fields.rhoref.data(), exner.data(),
+                            gd.istart, gd.jstart, gd.kstart,
+                            gd.iend,   gd.jend,   gd.kend,
+                            gd.icells, gd.ijcells);
+        } else {
+            // Chama a função prognóstica   
+            mp3d::accretion_prog(qrt->fld.data(), qtt->fld.data(), thlt->fld.data(),
+                            nct_stat->fld.data(),
+                            fields.sp.at("qr")->fld.data(), ql->fld.data(),
+                            fields.sp.at("nc")->fld.data(),
+                            fields.rhoref.data(), exner.data(),
+                            gd.istart, gd.jstart, gd.kstart,
+                            gd.iend,   gd.jend,   gd.kend,
+                            gd.icells, gd.ijcells);
+        }
 
         stats.calc_stats("accr_qrt" , *qrt , no_offset, no_threshold);
         stats.calc_stats("accr_thlt", *thlt, no_offset, no_threshold);
