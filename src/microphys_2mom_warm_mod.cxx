@@ -690,7 +690,8 @@ Microphys_2mom_warm_mod<TF>::Microphys_2mom_warm_mod(Master& masterin, Grid<TF>&
     // Read microphysics switches and settings
     swmicrobudget = inputin.get_item<bool>("micro", "swmicrobudget", "", false);
     cflmax = inputin.get_item<TF>("micro", "cflmax", "", 2.);
-    Nc0 = inputin.get_item<TF>("micro", "Nc0", "");
+    Nc0 = inputin.get_item<TF>("micro", "Nc0", "", 70e6);
+    Na0 = inputin.get_item<TF>("micro", "Na0", "", 100e6);
     swprognc = inputin.get_item<bool>("micro", "swprognc", "", false);
 
     // Ler os parâmetros de aerossol da secção [micro] do ficheiro .ini
@@ -725,7 +726,7 @@ void Microphys_2mom_warm_mod<TF>::init()
     auto& gd = grid.get_grid_data();
 
     rr_bot.resize(gd.ijcells);     // 2D surface sedimentation flux (rain rate)
-
+    std::fill(fields.sp.at("na")->fld.begin(), fields.sp.at("na")->fld.end(), Na0);
     std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
 }
 
@@ -879,7 +880,8 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
 
                         const TF Temp  = thl[ijk] * exner[k]
                                     + Constants::Lv<TF> * ql->fld[ijk] / (Constants::cp<TF> * exner[k]); // DIFERENTE DA Eq. 3.6
-                        const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível
+                        // const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível, conforme o roteiro
+                        const TF Ntot  = na[ijk];  // População total disponível, conforme Abdul-Razzak & Ghan, 2000 
 
                         // Calcular N_act (m-3)
                         const TF Nact  = arg_nact(wef, Temp, p0_k, Ntot,
