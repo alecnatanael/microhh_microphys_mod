@@ -726,8 +726,8 @@ void Microphys_2mom_warm_mod<TF>::init()
     auto& gd = grid.get_grid_data();
 
     rr_bot.resize(gd.ijcells);     // 2D surface sedimentation flux (rain rate)
-    std::fill(fields.sp.at("na")->fld.begin(), fields.sp.at("na")->fld.end(), Na0);
-    std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
+    // std::fill(fields.sp.at("na")->fld.begin(), fields.sp.at("na")->fld.end(), Na0);
+    // std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
 }
 
 template<typename TF>
@@ -793,6 +793,10 @@ void Microphys_2mom_warm_mod<TF>::create(
     std::vector<std::string> allowed_crossvars = {"rr_bot"};
     // 2. Cross-reference with the variables requested in the .ini file:
     crosslist = cross.get_enabled_variables(allowed_crossvars);
+
+    // Inicialização robusta (fld já está alocado aqui)
+    std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
+    std::fill(fields.sp.at("na")->fld.begin(), fields.sp.at("na")->fld.end(), Na0);
 }
 
 #ifndef USECUDA
