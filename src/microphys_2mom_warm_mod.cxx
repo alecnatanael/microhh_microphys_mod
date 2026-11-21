@@ -880,8 +880,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
 
                         const TF Temp  = thl[ijk] * exner[k]
                                     + Constants::Lv<TF> * ql->fld[ijk] / (Constants::cp<TF> * exner[k]); // DIFERENTE DA Eq. 3.6
-                        // const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível, conforme o roteiro
-                        const TF Ntot  = na[ijk];  // População total disponível, conforme Abdul-Razzak & Ghan, 2000 
+                        const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível
 
                         // Calcular N_act (m-3)
                         const TF Nact  = arg_nact(wef, Temp, p0_k, Ntot,
