@@ -172,7 +172,8 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF>)
                     {
-                        const TF xc      = rho[k] * ql[ijk] / nc;    // Mean mass of cloud drops [kg]
+                        const TF xc_raw  = rho[k] * ql[ijk] / nc;    // Mean mass of cloud drops [kg]
+                        const TF xc      = std::min(std::max(xc_raw, mc_min<TF>), mc_max<TF>);   // clamp para evitar explosão
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
                         const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
                         const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
@@ -243,8 +244,9 @@ namespace mp3d
                     const int ijk = i + j*jj + k*kk;
                     if (ql[ijk] > ql_min<TF>)
                     {
-                        const TF nc_val = std::max(nc[ijk], TF(1.));
-                        const TF xc     = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
+                        const TF nc_val  = std::max(nc[ijk], TF(1.));
+                        const TF xc_raw  = rho[k] * ql[ijk] / nc_val;   // Mean mass of cloud drops [kg]
+                        const TF xc      = std::min(std::max(xc_raw, mc_min<TF>), mc_max<TF>);   // clamp para evitar explosão
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
                         const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
                         const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
@@ -794,9 +796,10 @@ void Microphys_2mom_warm_mod<TF>::create(
     // 2. Cross-reference with the variables requested in the .ini file:
     crosslist = cross.get_enabled_variables(allowed_crossvars);
 
-    // Inicialização robusta (fld já está alocado aqui)
+    // Inicialização robusta (fld já está alocado aqui).
     std::fill(fields.sp.at("nc")->fld.begin(), fields.sp.at("nc")->fld.end(), Nc0);
     std::fill(fields.sp.at("na")->fld.begin(), fields.sp.at("na")->fld.end(), Na0);
+
 }
 
 #ifndef USECUDA
@@ -834,10 +837,25 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     const TF* const restrict w = fields.mp.at("w")->fld.data();  // modificado de sp para mp
     const TF* const restrict thl = fields.sp.at("thl")->fld.data();
 
-    TF* const restrict nat = fields.st.at("na")->fld.data();
-    TF* const restrict na  = fields.sp.at("na")->fld.data();
     TF* const restrict nct = fields.st.at("nc")->fld.data();
     TF* const restrict nc  = fields.sp.at("nc")->fld.data();
+    TF* const restrict nat = fields.st.at("na")->fld.data();
+    TF* const restrict na  = fields.sp.at("na")->fld.data();
+
+    // -----------------------------------------------------------------
+    // Inicialização dependente de ql (apenas na primeira chamada e apenas
+    // no modo prognóstico). Evita que E_nc dispare no céu claro (ql=0, nc=Nc0)
+    // e infle na de Na0 para Na0+Nc0 no primeiro passo.
+    // -----------------------------------------------------------------
+    if (first_exec) {
+        if (swprognc) {
+            for (int ijk = 0; ijk < gd.ncells; ++ijk) {
+                nc[ijk] = (ql->fld[ijk] > ql_min<TF>) ? Nc0 : TF(0);
+                na[ijk] = Na0;
+            }
+        }
+        first_exec = false;
+    }
 
     // TKE de sub-grade (só existe com fechamento 1.5). Caso contrário, e_sgs = 0.
     TF* sgs_tke = nullptr;

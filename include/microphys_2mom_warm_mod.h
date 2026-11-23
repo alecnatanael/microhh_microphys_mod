@@ -204,6 +204,7 @@ class Microphys_2mom_warm_mod : public Microphys<TF>
         TF Nc0; // Cloud droplet number concentration.
         TF Na0; // Concentração inicial de aerossóis [m^-3]
         bool swprognc; // Se true, nc é prognóstico; se false, fixo em Nc0 (modo validação)
+        bool first_exec = true;   // flag para primeira execução de exec(). Implementa init de nc dependente de ql no primeiro exec
 
         // ====================================================================
         // ADIÇÃO: Parâmetros de aerossol lidos do arquivo de configuração (.ini)
