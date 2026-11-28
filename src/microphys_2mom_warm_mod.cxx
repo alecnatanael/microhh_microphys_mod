@@ -208,7 +208,7 @@ namespace mp3d
                     {
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
                         const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
-                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7  // DIVERGÊNCIA ?
 
                         qrt[ijk]  += ac_tend;
                         qtt[ijk]  -= ac_tend;
@@ -226,6 +226,7 @@ namespace mp3d
                     const TF* const restrict qr,  const TF* const restrict ql,
                     const TF* const restrict nc,
                     const TF* const restrict rho, const TF* const restrict exner,
+                    const TF dt,
                     const int istart, const int jstart, const int kstart,
                     const int iend,   const int jend,   const int kend,
                     const int jj, const int kk)
@@ -250,17 +251,20 @@ namespace mp3d
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
                         const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
                         const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
-                                            (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
+                                            (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4   // DIVERGÊNCIA?
 
                         qrt[ijk]  += au_tend;
                         nrt[ijk]  += au_tend * rho[k] / x_star;
-                        nct[ijk]  -= TF(2.) * au_tend * rho[k] / x_star;   // 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
                         qtt[ijk]  -= au_tend;
                         thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * au_tend;
 
+                        // Autoconversão - 2 gotículas -> 1 gota de chuva: 2*P_{au}/x*
                         // Autocoleta de gotículas (reduz nc sem perda de massa): P_{sc,c}^N
+
                         const TF Lc = rho[k] * ql[ijk];
-                        nct[ijk] -= sc_c_coef * Lc * Lc;
+                        // const TF nc_destruido = TF(2.) * au_tend * rho[k] / x_star + sc_c_coef * Lc * Lc;
+                        const TF nc_destruido = TF(2.) * au_tend / x_star + sc_c_coef * Lc * Lc / rho[k];  // Tentei corrigir as unidades aqui
+                        nct[ijk] -= std::min(nc_destruido, nc[ijk] / dt);   // CORREÇÃO: Limitador deste sumidouro de nc para que nunca consuma mais do que existe na célula
                     }
                 }
     }
@@ -272,6 +276,7 @@ namespace mp3d
                const TF* const restrict qr,  const TF* const restrict ql,
                const TF* const restrict nc,
                const TF* const restrict rho, const TF* const restrict exner,
+               const TF dt,
                const int istart, const int jstart, const int kstart,
                const int iend,   const int jend,   const int kend,
                const int jj, const int kk)
@@ -295,7 +300,10 @@ namespace mp3d
                         thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ac_tend;
 
                         // Redução de nc por acreção: Nc/Lc * Pac = nc * ac_tend / ql
-                        nct[ijk] -= nc[ijk] * ac_tend / ql[ijk];
+
+                        // CORREÇÃO: Limitador deste sumidouro de nc para que nunca consuma mais do que existe na célula
+                        const TF nc_destruido = nc[ijk] * ac_tend / ql[ijk];
+                        nct[ijk] -= std::min(nc_destruido, nc[ijk] / dt);
                     }
                 }
     }
@@ -842,6 +850,8 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
     TF* const restrict nat = fields.st.at("na")->fld.data();
     TF* const restrict na  = fields.sp.at("na")->fld.data();
 
+    const TF* const restrict rho = fields.rhoref.data();
+
     // -----------------------------------------------------------------
     // Inicialização dependente de ql (apenas na primeira chamada e apenas
     // no modo prognóstico). Evita que E_nc dispare no céu claro (ql=0, nc=Nc0)
@@ -902,7 +912,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
 
                         const TF Temp  = thl[ijk] * exner[k]
                                     + Constants::Lv<TF> * ql->fld[ijk] / (Constants::cp<TF> * exner[k]); // DIFERENTE DA Eq. 3.6
-                        const TF Ntot  = na[ijk] + nc[ijk];  // População total disponível
+                        const TF Ntot  = rho[k]*(na[ijk] + nc[ijk]);  // População total disponível - Tentei corrigir unidades aqui
 
                         // Calcular N_act (m-3)
                         const TF Nact  = arg_nact(wef, Temp, p0_k, Ntot,
@@ -910,8 +920,8 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
 
                         // Taxa de ativação A_act (m-3 s-1)
                         const TF A_act = std::min(
-                                std::max(TF(0), Nact - nc[ijk]) / TF(dt),
-                                na[ijk] / TF(dt) );
+                                std::max(TF(0), Nact - rho[k]*nc[ijk]) / TF(dt),
+                                rho[k]*na[ijk] / TF(dt) ) / rho[k];   // Tentei corrigir unidades aqui
 
                         // Atualizar tendências: consome aerossol 'na' e aumenta gotículas 'nc'
                         nat[ijk] -= A_act;
@@ -994,6 +1004,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
                         fields.sp.at("qr")->fld.data(), ql->fld.data(),
                         nc,
                         fields.rhoref.data(), exner.data(),
+                        dt,
                         gd.istart, gd.jstart, gd.kstart,
                         gd.iend,   gd.jend,   gd.kend,
                         gd.icells, gd.ijcells);
@@ -1005,6 +1016,7 @@ void Microphys_2mom_warm_mod<TF>::exec(Thermo<TF>& thermo, const double dt, Stat
                         fields.sp.at("qr")->fld.data(), ql->fld.data(),
                         nc,
                         fields.rhoref.data(), exner.data(),
+                        dt,
                         gd.istart, gd.jstart, gd.kstart,
                         gd.iend,   gd.jend,   gd.kend,
                         gd.icells, gd.ijcells);
@@ -1159,6 +1171,7 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
                             fields.sp.at("qr")->fld.data(), ql->fld.data(),
                             fields.sp.at("nc")->fld.data(),
                             fields.rhoref.data(), exner.data(),
+                            dt,
                             gd.istart, gd.jstart, gd.kstart,
                             gd.iend,   gd.jend,   gd.kend,
                             gd.icells, gd.ijcells);
@@ -1192,6 +1205,7 @@ void Microphys_2mom_warm_mod<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& therm
                             fields.sp.at("qr")->fld.data(), ql->fld.data(),
                             fields.sp.at("nc")->fld.data(),
                             fields.rhoref.data(), exner.data(),
+                            dt,
                             gd.istart, gd.jstart, gd.kstart,
                             gd.iend,   gd.jend,   gd.kend,
                             gd.icells, gd.ijcells);

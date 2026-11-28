@@ -179,6 +179,12 @@ class Microphys_2mom_warm_mod : public Microphys<TF>
         TF get_Nc0() { return this->Nc0; }
         TF get_Ni0() { return static_cast<TF>(1e5); } // CvH: this is a temporary fix with previous default value, Ni0 is 3D in tomita!
 
+        // Sobrescrever os getters
+        bool get_swprognc() override { return swprognc; }
+        const std::vector<TF>* get_nc_field_ptr() override { 
+            return &fields.sp.at("nc")->fld; 
+        }
+
         unsigned long get_time_limit(unsigned long, double);
 
         #ifdef USECUDA

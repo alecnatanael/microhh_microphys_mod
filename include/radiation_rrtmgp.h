@@ -167,7 +167,10 @@ class Radiation_rrtmgp : public Radiation<TF>
                 Array<Float,2>&, Array<Float,2>&, Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&, const Array<Float,1>&,
                 const Array<Float,2>&, const Array<Float,2>&, const Array<Float,2>&,
-                const bool, const int);
+                const bool, const int,
+                const std::vector<TF>* nc_ptr = nullptr,
+                const std::vector<int>* col_i = nullptr,
+                const std::vector<int>* col_j = nullptr);
 
         void exec_shortwave(
                 Thermo<TF>&, Microphys<TF>&, Timeloop<TF>&, Stats<TF>&,
@@ -176,7 +179,10 @@ class Radiation_rrtmgp : public Radiation<TF>
                 const Array<Float,2>&, const Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&,
-                const bool, const int);
+                const bool, const int,
+                const std::vector<TF>* nc_ptr = nullptr,
+                const std::vector<int>* col_i = nullptr,
+                const std::vector<int>* col_j = nullptr);
 
         #ifdef USECUDA
         void exec_longwave(

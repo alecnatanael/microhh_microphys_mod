@@ -71,6 +71,10 @@ class Microphys
 
         virtual TF get_Nc0() = 0;
         virtual TF get_Ni0() = 0;
+        
+        // garante que microphys_2mom_warm original (e qualquer outro esquema) continue funcionando
+        virtual bool get_swprognc() { return false; }
+        virtual const std::vector<TF>* get_nc_field_ptr() { return nullptr; }
 
         // GPU functions and variables.
         #ifdef USECUDA

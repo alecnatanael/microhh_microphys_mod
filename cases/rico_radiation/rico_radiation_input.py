@@ -1,3 +1,10 @@
+import sys
+import os
+
+# Adiciona o diretório `python/` do MicroHH ao path (relativo ao script)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_script_dir, '..', '..', 'python'))
+
 import numpy as np
 import netCDF4 as nc
 import microhh_tools as mht

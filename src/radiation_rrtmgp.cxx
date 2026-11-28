@@ -1730,7 +1730,8 @@ void Radiation_rrtmgp<TF>::exec(
                         thermo, microphys, timeloop, stats,
                         flux_up, flux_dn, flux_net,
                         t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
-                        compute_clouds, gd.imax*gd.jmax);
+                        compute_clouds, gd.imax*gd.jmax,
+                        microphys.get_nc_field_ptr());
 
                 calc_tendency(
                         fields.sd.at("thlt_rad")->fld.data(),
@@ -1774,7 +1775,8 @@ void Radiation_rrtmgp<TF>::exec(
                                 thermo, microphys, timeloop, stats,
                                 flux_up, flux_dn, flux_net,
                                 t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
-                                !compute_clouds, gd.imax*gd.jmax);
+                                !compute_clouds, gd.imax*gd.jmax,
+                                microphys.get_nc_field_ptr());
 
                         do_gcs(*fields.sd.at("lw_flux_up_clear"), flux_up);
                         do_gcs(*fields.sd.at("lw_flux_dn_clear"), flux_dn);
@@ -1808,7 +1810,8 @@ void Radiation_rrtmgp<TF>::exec(
                             flux_up, flux_dn, flux_dn_dir, flux_net,
                             aod550,
                             t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                            compute_clouds, gd.imax * gd.jmax);
+                            compute_clouds, gd.imax * gd.jmax,
+                            microphys.get_nc_field_ptr());
 
                     calc_tendency(
                             fields.sd.at("thlt_rad")->fld.data(),
@@ -1893,7 +1896,8 @@ void Radiation_rrtmgp<TF>::exec(
                                     flux_up, flux_dn, flux_dn_dir, flux_net,
                                     aod550,
                                     t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                                    !compute_clouds, gd.imax * gd.jmax);
+                                    !compute_clouds, gd.imax * gd.jmax,
+                                    microphys.get_nc_field_ptr());
                         }
                         do_gcs(*fields.sd.at("sw_flux_up_clear"), flux_up);
                         do_gcs(*fields.sd.at("sw_flux_dn_clear"), flux_dn);
@@ -2198,7 +2202,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                     thermo, microphys, timeloop, stats,
                     flux_up, flux_dn, flux_net,
                     t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
-                    compute_clouds, n_cols);
+                    compute_clouds, n_cols,
+                    microphys.get_nc_field_ptr(), &col_i, &col_j);
 
             save_column(flux_up, "lw_flux_up");
             save_column(flux_dn, "lw_flux_dn");
@@ -2209,7 +2214,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                         thermo, microphys, timeloop, stats,
                         flux_up, flux_dn, flux_net,
                         t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
-                        !compute_clouds, n_cols);
+                        !compute_clouds, n_cols,
+                        microphys.get_nc_field_ptr(), &col_i, &col_j);
 
                 save_column(flux_up, "lw_flux_up_clear");
                 save_column(flux_dn, "lw_flux_dn_clear");
@@ -2262,7 +2268,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                         flux_up, flux_dn, flux_dn_dir, flux_net,
                         aod550_column_stats,
                         t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                        compute_clouds, n_cols);
+                        compute_clouds, n_cols,
+                        microphys.get_nc_field_ptr(), &col_i, &col_j);
 
                 save_column(flux_up, "sw_flux_up");
                 save_column(flux_dn, "sw_flux_dn");
@@ -2275,7 +2282,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                             flux_up, flux_dn, flux_dn_dir, flux_net,
                             aod550_column_stats,
                             t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                            !compute_clouds, n_cols);
+                            !compute_clouds, n_cols,
+                            microphys.get_nc_field_ptr(), &col_i, &col_j);
 
                     save_column(flux_up, "sw_flux_up_clear");
                     save_column(flux_dn, "sw_flux_dn_clear");
@@ -2306,7 +2314,10 @@ void Radiation_rrtmgp<TF>::exec_longwave(
         Array<Float,2>& flux_up, Array<Float,2>& flux_dn, Array<Float,2>& flux_net,
         const Array<Float,2>& t_lay, const Array<Float,2>& t_lev, const Array<Float,1>& t_sfc,
         const Array<Float,2>& h2o, const Array<Float,2>& clwp, const Array<Float,2>& ciwp,
-        const bool compute_clouds, const int n_col)
+        const bool compute_clouds, const int n_col,
+        const std::vector<TF>* nc_ptr,
+        const std::vector<int>* col_i,
+        const std::vector<int>* col_j)
 {
     // How many profiles are solved simultaneously?
     constexpr int n_col_block = 4;
@@ -2394,7 +2405,6 @@ void Radiation_rrtmgp<TF>::exec_longwave(
             const TF Nc0 = microphys.get_Nc0();
             const TF Ni0 = microphys.get_Ni0();
 
-            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
             const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
 
             for (int ilay=1; ilay<=n_lay; ++ilay)
@@ -2404,10 +2414,36 @@ void Radiation_rrtmgp<TF>::exec_longwave(
 
                 for (int icol=1; icol<=n_col_in; ++icol)
                 {
+                    // ---- NOVO: obter Nc para esta célula ----
+                    Float Nc;
+                    if (nc_ptr != nullptr) {
+                        int i, j;
+                        if (col_i != nullptr && col_j != nullptr) {
+                            i = (*col_i)[icol-1];          // caso exec_individual_column_stats
+                            j = (*col_j)[icol-1];
+                        } else {
+                            i = (icol - 1) % gd.imax + gd.igc;      // caso exec padrão
+                            j = (icol - 1) / gd.imax + gd.jgc;
+                        }
+                        const int k = ilay - 1 + gd.kstart;
+                        const int ijk = i + j * gd.icells + k * gd.ijcells;
+                        Nc = (*nc_ptr)[ijk];
+                    } else {
+                        Nc = Nc0;                          // modo validação / esquemas sem nc
+                    }
+                    // ----------------------------------------
+
                     // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
                     // CvH: Potentially better using moments from microphysics.
-                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
-                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+
+                    // Cálculo de rel com Nc local (mesma fórmula do original mas com Nc no lugar de Nc0)
+                    Float rel_value = Float(0.);
+                    if (clwp_subset({icol, ilay}) > Float(0.) && Nc > Float(0.)) {
+                        rel_value = 1.e6 * fac * std::pow(
+                            (clwp_subset({icol, ilay})/layer_thickness) /
+                            ((4./3.)*M_PI*Nc*Constants::rho_w<Float>),
+                            (1./3.));
+                    }
 
                     // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
                     rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
@@ -2514,7 +2550,10 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         const Array<Float,2>& t_lay, const Array<Float,2>& t_lev,
         const Array<Float,2>& h2o, const Array<Float, 2>& rh,
         const Array<Float,2>& clwp, const Array<Float,2>& ciwp,
-        const bool compute_clouds, const int n_col)
+        const bool compute_clouds, const int n_col,
+        const std::vector<TF>* nc_ptr,
+        const std::vector<int>* col_i,
+        const std::vector<int>* col_j)
 {
     // How many profiles are solved simultaneously?
     constexpr int n_col_block = 4;
@@ -2616,7 +2655,6 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
             const TF Nc0 = microphys.get_Nc0();
             const TF Ni0 = microphys.get_Ni0();
 
-            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
             const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
 
             for (int ilay=1; ilay<=n_lay; ++ilay)
@@ -2626,10 +2664,37 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
                 for (int icol=1; icol<=n_col_in; ++icol)
                 {
+
+                    // ---- NOVO: obter Nc para esta célula ----
+                    Float Nc;
+                    if (nc_ptr != nullptr) {
+                        int i, j;
+                        if (col_i != nullptr && col_j != nullptr) {
+                            i = (*col_i)[icol-1];          // caso exec_individual_column_stats
+                            j = (*col_j)[icol-1];
+                        } else {
+                            i = (icol - 1) % gd.imax;      // caso exec padrão
+                            j = (icol - 1) / gd.imax;
+                        }
+                        const int k = ilay - 1 + gd.kstart;
+                        const int ijk = (i + gd.igc) + (j + gd.jgc) * gd.icells + k * gd.ijcells;
+                        Nc = (*nc_ptr)[ijk];
+                    } else {
+                        Nc = Nc0;                          // modo validação / esquemas sem nc
+                    }
+                    // ----------------------------------------
+
                     // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
                     // CvH: Potentially better using moments from microphysics.
-                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
-                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+
+                    // Cálculo de rel com Nc local (mesma fórmula do original mas com Nc no lugar de Nc0)
+                    Float rel_value = Float(0.);
+                    if (clwp_subset({icol, ilay}) > Float(0.) && Nc > Float(0.)) {
+                        rel_value = 1.e6 * fac * std::pow(
+                            (clwp_subset({icol, ilay})/layer_thickness) /
+                            ((4./3.)*M_PI*Nc*Constants::rho_w<Float>),
+                            (1./3.));
+                    }
 
                     // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
                     rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
